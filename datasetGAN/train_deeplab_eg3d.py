@@ -20,11 +20,16 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
-from ipdb import set_trace as st
-import ipdb
 import sys
 sys.path.append('../')
 import os
+
+
+import imageio
+from util.utils import process_image, colorize_mask
+from pdb import set_trace as st
+import sys
+
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   # see issue #152
 import argparse
 from pathlib import Path
@@ -75,6 +80,13 @@ class ImageLabelDataset(Dataset):
 
         if len(lbl.shape) == 3:
             lbl = lbl[:, :, 0]
+        
+        # ! ignore hair 
+        # lbl[lbl == 17] = 0
+        # lbl[lbl == 18] = 0
+
+        # ! ignore neck
+        lbl[lbl==25] = 0
 
         lbl = self.label_trans(lbl)
         lbl = Image.fromarray(lbl.astype('uint8'))
@@ -117,8 +129,22 @@ class ImageDataset(Dataset):
         img = transforms.ToTensor()(img)
         return img
 
+
 def main(data_path, args, resume, max_data=0, uncertainty_portion=0, ddf_sample=False):
     exp_path = args['exp_dir']
+
+    if args['category'] == 'car':
+        from util.data_util import car_20_palette as palette
+        ignore_index = -1
+    elif args['category'] == 'face':
+        from util.data_util import face_palette as palette
+        ignore_index = -1
+    elif args['category'] == 'bedroom':
+        from util.data_util import bedroom_palette as palette
+        ignore_index = 0
+    elif args['category'] == 'cat':
+        from util.data_util import cat_palette as palette
+        ignore_index = -1
 
     base_path = os.path.join(exp_path, "deeplab_class_%d_checkpoint_%d_filter_out_%f" %(args['testing_data_number_class'],
                                                                                         int(max_data),
@@ -187,26 +213,32 @@ def main(data_path, args, resume, max_data=0, uncertainty_portion=0, ddf_sample=
         # update 2022 Sept 8
         stylegan_images = []
         stylegan_labels = []
-        dataset_root = list(Path(data_path).glob('*seed*'))
-        if len(dataset_root) == 0:
-            dataset_root = [Path(data_path)]
-        for sub_dataset in dataset_root:
+        # dataset_root = list(Path(data_path).glob('*seed*'))
+        # if len(dataset_root) == 0:
+        #     dataset_root = [Path(data_path)]
+        # for sub_dataset in dataset_root:
 
-            img_dir = sub_dataset / 'for_dsgan_seg'
-            label_dir = sub_dataset / 'for_dsgan_seg_label'
+        data_path = Path(data_path)
 
-            num_imgs = len(list(img_dir.glob('*.png')))
+        img_dir = data_path / 'for_dsgan_seg'
+        label_dir = data_path / 'for_dsgan_seg_label'
 
-            for idx in range(num_imgs):
-                img_name = img_dir / f'{idx:04}.png'   # ffhq
-                label_name = label_dir / f'{idx}.png'  
+        num_imgs = len(list(img_dir.glob('*.png')))
 
-                if not (img_name.exists() and label_name.exists()):
-                    continue
+        for idx in range(num_imgs):
+            img_name = img_dir / f'{idx:04}.png'   # ffhq
+            label_name = label_dir / f'{idx}.png'  
 
-                stylegan_images.append(str(img_name))
-                stylegan_labels.append(str(label_name))
+            # st()
 
+            if not (img_name.exists() and label_name.exists()):
+                print(img_name, 'missing')
+                continue
+
+            stylegan_images.append(str(img_name))
+            stylegan_labels.append(str(label_name))
+
+    # st()
 
 
     if args['number_class'] ==  args['testing_data_number_class']:
@@ -214,6 +246,7 @@ def main(data_path, args, resume, max_data=0, uncertainty_portion=0, ddf_sample=
     else:
         # for testing on ADE-12 only. Since our generated images has 20 labels. Need to merge labels based on testing set.
         trans_method = trans_mask_stylegan_20classTo12
+
     assert  len(stylegan_images) == len(stylegan_labels)
     print( "Train data length,", str(len(stylegan_labels)))
 
@@ -221,12 +254,14 @@ def main(data_path, args, resume, max_data=0, uncertainty_portion=0, ddf_sample=
                               label_path_list=stylegan_labels, trans=trans_method,
                             img_size=(args['deeplab_res'], args['deeplab_res']), )
 
-    train_data = DataLoader(train_data, batch_size=args['batch_size'], shuffle=True, num_workers=16, drop_last=True)
+    train_data = DataLoader(train_data, batch_size=args['batch_size'], shuffle=True, num_workers=4, drop_last=True)
+    # train_data = DataLoader(train_data, batch_size=args['batch_size'], shuffle=False, num_workers=4, drop_last=True)
     classifier = torchvision.models.segmentation.deeplabv3_resnet101(pretrained=False, progress=False,
                                                                      num_classes=num_class, aux_loss=None)
     if resume != "":
         checkpoint = torch.load(resume)
         classifier.load_state_dict(checkpoint['model_state_dict'])
+        print('loading from ', resume)
 
     classifier.cuda()
     num_gpus = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
@@ -245,7 +280,10 @@ def main(data_path, args, resume, max_data=0, uncertainty_portion=0, ddf_sample=
         std=[0.229, 0.224, 0.225])
 
 
-    for epoch in range(20):
+    # for epoch in range(20):
+    # for epoch in range(6, 25):
+    # for epoch in range(15, 25): # add ear class, resume training
+    for epoch in range(19, 25): # add ear class, resume training
         for i, da, in enumerate(train_data):
             # continue # dry run
 
@@ -258,7 +296,7 @@ def main(data_path, args, resume, max_data=0, uncertainty_portion=0, ddf_sample=
             classifier.train()
 
             optimizer.zero_grad()
-            img, mask = da[0], da[1]
+            img, mask, im_path = da[0], da[1], da[2]
 
             img = img.cuda()
             mask = mask.cuda()
@@ -273,6 +311,7 @@ def main(data_path, args, resume, max_data=0, uncertainty_portion=0, ddf_sample=
             input_img_tensor = torch.stack(input_img_tensor)
 
             y_pred = classifier(input_img_tensor)['out']
+            # st()
             loss = criterion(y_pred, mask)
             loss.backward()
             optimizer.step()
@@ -280,11 +319,30 @@ def main(data_path, args, resume, max_data=0, uncertainty_portion=0, ddf_sample=
             if i % 10 == 0:
                 print(epoch, 'epoch', 'iteration', i, 'loss', loss.item(), flush=True)
 
+            # visualize 
+
+            if i % 100 == 0:
+            # img, mask = da[0], da[1]
+                img_vis = img.cpu().numpy()* 255.
+
+                img_vis = np.transpose(img_vis, (0, 2, 3, 1)).astype(np.uint8)
+
+                y_pred_mask = y_pred.cpu().argmax(1).numpy()
+                mask_gt = mask.cpu().numpy()
+
+                curr_vis = np.concatenate( [img_vis[0], colorize_mask(y_pred_mask[0], palette), img_vis[0].astype(np.uint8) * 0.5 + 0.5 * colorize_mask(mask_gt[0], palette).astype(np.uint8)], 1 ) # concat in H
+
+                # testing_vis = np.concatenate(testing_vis, 1)
+                imageio.imsave(os.path.join(base_path, "epoch{}_{}.jpg".format(epoch, i)), curr_vis)
+                print(os.path.join(base_path, "{}.jpg".format(i)))
+                print('data path: ', im_path[0])
+
+
         model_path = os.path.join(base_path, 'deeplab_epoch_' + str(epoch) + '.pth')
 
         print('Save to:', model_path)
         torch.save({'model_state_dict': classifier.state_dict()},
-                   model_path)
+                model_path)
 
 
 

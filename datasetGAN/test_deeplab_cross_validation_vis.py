@@ -38,7 +38,6 @@ import scipy.misc
 from pathlib import Path
 import imageio
 import ipdb
-from ipdb import set_trace as st
 
 import pickle
 
@@ -82,8 +81,7 @@ def cross_validate(cp_path, args):
         ignore_index = -1
     elif args['category'] == 'face':
         from util.data_util import face_palette as palette
-        # ignore_index = -1
-        ignore_index = 0 # ! no metrics in background, follow coordgan
+        ignore_index = -1
     elif args['category'] == 'bedroom':
         from util.data_util import bedroom_palette as palette
         ignore_index = 0
@@ -104,17 +102,12 @@ def cross_validate(cp_path, args):
     cp_list = [data for data in cps_all if '.pth' in data and 'BEST' not in data]
     cp_list.sort()
 
-    # ids = range(args['testing_data_number_class'])
-    ids = range(1, args['testing_data_number_class']) # ignore background
+    ids = range(args['testing_data_number_class'])
 
     # merge some classes
     data_all = glob.glob(args['testing_path'] + "/*")
-    # images = [path for path in data_all if 'npy' not in path]
-    # labels = [path for path in data_all if 'npy' in path]
-
-    images = [path for path in data_all if 'mask' not in path]
-    labels = [path for path in data_all if 'mask' in path]
-
+    images = [path for path in data_all if 'npy' not in path]
+    labels = [path for path in data_all if 'npy' in path]
     images.sort()
     labels.sort()
 
@@ -219,20 +212,6 @@ def cross_validate(cp_path, args):
                     mask = mask.cpu().detach().numpy()
                     bs = y_pred.shape[0]
 
-                    # ! ignore hair and neck; ignore background
-                    ignore_hair = [
-                        face_class.index(name) for name in [
-                            'background', 
-                            'head***hair',
-                            'head***hair***sideburns', 
-                            'head***neck',
-                        ]
-                    ]
-
-                    for class_idx in ignore_hair:
-                        y_pred[y_pred==class_idx] = 0
-                        mask[mask == class_idx] = 0
-
                     curr_iou = []
                     if ignore_index > 0:
                         y_pred = y_pred * (mask != ignore_index)
@@ -269,7 +248,8 @@ def cross_validate(cp_path, args):
 
                     with torch.no_grad():
                         testing_vis = []
-                        # for _, da, in enumerate(test_data):
+
+    # for j, da, in enumerate(vis_data):
                         for _, da, in enumerate(vis_data):
 
                             img, mask = da[0], da[1]
@@ -306,22 +286,6 @@ def cross_validate(cp_path, args):
                                 if not union == 0:
                                     curr_iou.append(intersection / union)
 
-                            # visualization ignore some class
-
-                            ignore_hair = [
-                                face_class.index(name) for name in [
-                                    'background', 
-                                    'head***hair',
-                                    'head***hair***sideburns', 
-                                    'head***neck',
-                                ]
-                            ]
-
-                            for class_idx in ignore_hair:
-                                y_pred[y_pred==class_idx] = 0
-                                # mask[mask == class_idx] = 0
-
-
 
                             img = img.cpu().numpy()
                             img =  img * 255.
@@ -334,7 +298,6 @@ def cross_validate(cp_path, args):
                         testing_vis = np.concatenate(testing_vis, 1)
                         imageio.imwrite(os.path.join(base_path, "testing_round_%d.jpg" % i),
                                           testing_vis)
-                        print('save to ', os.path.join(base_path, "testing_round_%d.jpg" % i))
 
                         test_mean_ious = []
 
@@ -398,6 +361,8 @@ def test(cp_path, args, validation_number=50):
     base_path = os.path.join(cp_path, "validation")
     if not os.path.exists(base_path):
         os.mkdir(base_path)
+
+    ipdb.set_trace()
 
 
     cps_all = glob.glob(cp_path + "/*")
@@ -509,17 +474,6 @@ def test(cp_path, args, validation_number=50):
                 mask = mask.cpu().detach().numpy()
                 bs = y_pred.shape[0]
 
-                # ! post-processing, ignore hair and neck for comparision in coordgan
-
-                ignore_hair = [
-                    face_class.index(name) for name in [
-                        'background', 
-                        'head***hair',
-                        'head***hair***sideburns', 
-                        'head***neck',
-                    ]
-                ]
-
                 curr_iou = []
 
                 for target_num in ids:
@@ -539,8 +493,6 @@ def test(cp_path, args, validation_number=50):
             for target_num in ids:
                 mean_ious.append(intersections[target_num] / (1e-8 + unions[target_num]))
             mean_iou_val = np.array(mean_ious).mean()
-
-            print(resume, mean_iou_val)
 
             if mean_iou_val > best_val_miou:
                 best_val_miou = mean_iou_val

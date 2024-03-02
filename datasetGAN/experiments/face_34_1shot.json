@@ -1,5 +1,5 @@
 {
-  "exp_dir": "model_dir/face_34",
+  "exp_dir": "model_dir/face_34_1shot",
   "batch_size": 8,
   "category": "face",
   "debug": false,
@@ -11,7 +11,7 @@
   "deeplab_res": 512,
   "number_class": 34,
   "testing_data_number_class": 34,
-  "max_training": 16,
+  "max_training": 1,
   "stylegan_ver": "1",
   "annotation_data_from_w": false,
   "annotation_mask_path": "./dataset_release/annotation/training_data/face_processed",

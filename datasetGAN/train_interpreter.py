@@ -26,6 +26,7 @@ import imageio
 from tqdm import tqdm, trange
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
+from ipdb import set_trace as st
 
 import sys
 
@@ -471,6 +472,7 @@ def inference_data(args, checkpoint_path, num_sample, img_path, start_step=0, vi
             img = img[0]
 
         image_cache.append(img)
+        st()
         if args['dim'][0] != args['dim'][1]:
             affine_layers = affine_layers[:, :, 64:448]
         affine_layers = affine_layers[0]
@@ -620,6 +622,7 @@ def prepare_data(args, palette):
         dtype=np.float16)
 
     vis = []
+    # ipdb.set_trace()
     for i in range(len(latent_all)):
 
         gc.collect()
@@ -664,6 +667,8 @@ def prepare_data(args, palette):
              colorize_mask(new_mask, palette)], 0)
 
         vis.append(curr_vis)
+    
+    # ipdb.set_trace()
 
     vis = np.concatenate(vis, 1)
     imageio.imwrite(os.path.join(args['exp_dir'], "train_data.jpg"), vis)

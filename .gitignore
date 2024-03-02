@@ -1,0 +1,5 @@
+datasetGAN/dataset_release/datasetgan_release_checkpoints/interpreter_checkpoint/
+datasetGAN/dataset_release/annotation/testing_data
+datasetGAN/dataset_release/annotation/training_data
+datasetGAN/dataset_release/interpreter_checkpoint/
+datasetGAN/model_dir/

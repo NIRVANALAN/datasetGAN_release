@@ -183,7 +183,6 @@ def main(data_path, args, resume, max_data=0, uncertainty_portion=0, ddf_sample=
 
         #                 stylegan_images.append(str(img_name))
         #                 stylegan_labels.append(str(label_name))
-
         # update 2022 Sept 8
         stylegan_images = []
         stylegan_labels = []
@@ -192,17 +191,22 @@ def main(data_path, args, resume, max_data=0, uncertainty_portion=0, ddf_sample=
             dataset_root = [Path(data_path)]
         for sub_dataset in dataset_root:
 
-            img_dir = sub_dataset / 'for_dsgan_seg'
-            label_dir = sub_dataset / 'for_dsgan_seg_label'
+            img_dir = sub_dataset / 'eval_results/metrics/backward/raw'
+            label_dir = sub_dataset / 'eval_results/metrics/backward/seg_predictions'
 
+            # for sub_dir in sub_dataset.iterdir(): # psi
+            #     for sample in sub_dir.iterdir():
             num_imgs = len(list(img_dir.glob('*.png')))
-
+            # st()
             for idx in range(num_imgs):
-                img_name = img_dir / f'{idx:04}.png'   # ffhq
-                label_name = label_dir / f'{idx}.png'  
+                # img_name = img_dir / f'{idx}.png'  
+                img_name = img_dir / f'{idx:07}.png'   # ffhq
+                label_name = label_dir / f'batch_{idx}_src{idx}_tgt{idx}_inversed.png'  
 
                 if not (img_name.exists() and label_name.exists()):
                     continue
+                # assert img_name.exists(), img_name
+                # assert label_name.exists(), label_name
 
                 stylegan_images.append(str(img_name))
                 stylegan_labels.append(str(label_name))
